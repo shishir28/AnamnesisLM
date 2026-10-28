@@ -1,0 +1,159 @@
+%% AnamnesisLM development flow. Source plan: docs/ANAMNESISLM_PLAN.md
+%% Rectangles = work you write; diamonds = completion gates; blue = waiting on approval; dashed = later extensions or out of scope.
+flowchart TD
+    start(["Start: AnamnesisLM"])
+
+    subgraph M0["0. Setup · 1 session"]
+        m0a["PhysioNet account + CITI course<br/>request credentialed access"]
+        m0b["Data manifest template"]
+        m0c["External dir /data/physionet/<br/>deny Read(//data/physionet/**)<br/>verify with dummy files"]
+        m0b --> m0c
+    end
+    g0{"Application submitted?<br/>Dummy files unreadable by<br/>agent tools and shell?"}
+
+    approval[["PhysioNet approval<br/>days to a few weeks, in parallel"]]
+    dua["Sign MIMIC DUA<br/>download to external dir"]
+
+    subgraph M1["1. Task and schema · 1 session"]
+        m1a["JSON schema<br/>kind, mention, assertion, experiencer,<br/>temporality, evidence + offsets, med fields"]
+        m1b["Annotation rules<br/>unknown vs negated, 'no known allergies',<br/>ordering, one-to-one matching"]
+        m1c["20 hand-written design examples<br/>negation, history, family, uncertainty, absent info"]
+        m1a --> m1b --> m1c
+    end
+    g1{"Every example unambiguous?<br/>note[start:end] == evidence?"}
+
+    subgraph M2["2. Data inspection · 1 session"]
+        m2a["Download Synthea"]
+        m2b["Reader: inspect 100–1,000 patients"]
+        m2c["Provenance record"]
+        m2a --> m2b --> m2c
+    end
+    g2{"Formats, fields, counts,<br/>version/hash, limitations documented?"}
+
+    subgraph M3["3. Example construction · 1–2 sessions"]
+        m3a["Assign patient splits FIRST<br/>≈ 80/10/10"]
+        m3b["Narrative templates<br/>negation, uncertainty, family cues"]
+        m3c["Labels from rendered text + evidence offsets"]
+        m3d["Dedupe across splits<br/>held-out template families + challenge set<br/>design examples kept out of test"]
+        m3a --> m3b --> m3c --> m3d
+    end
+    g3{"Same inputs + seed →<br/>identical examples and splits?"}
+
+    subgraph M4["4. Batching and loss · 1–2 sessions"]
+        m4a["Serialize prompt + note + response + EOS<br/>current tokenizer"]
+        m4b{"Fits 512-token budget?"}
+        m4x["Reject and count<br/>never truncate targets"]
+        m4c["Batch + pad + response-only loss mask"]
+        m4a --> m4b
+        m4b -- no --> m4x
+        m4b -- yes --> m4c
+    end
+    g4{"IDs, masks, one-position shift<br/>verified on a tiny example?"}
+
+    subgraph M5["5. Model and tiny overfit · 1–2 sessions"]
+        m5a["Manual Transformer, random init<br/>tiny model first"]
+        m5b["Task training loop + checkpoint save/load"]
+        m5a --> m5b
+    end
+    g5{"Tiny set overfit?<br/>Reloaded logits match?"}
+
+    subgraph M6["6. Baseline and first run · 1–2 sessions"]
+        m6config["Choose 30–60M config after tiny checks pass<br/>exact parameter count"]
+        m6a["Rule-based extractor"]
+        m6b["Device benchmark: tokens/s, peak memory"]
+        m6f["Freeze scoring rules + targets<br/>before the main run"]
+        m6c["First recorded run<br/>greedy generation → JSON → metrics"]
+        m6config --> m6b
+        m6a --> m6c
+        m6b --> m6c
+        m6f --> m6c
+    end
+    g6{"Baseline + model metrics, tokens/s,<br/>peak memory, checkpoint recorded?"}
+
+    subgraph M7["7. Error analysis · 1–2 sessions"]
+        m7a["Categorize validation errors"]
+        m7b["Choose ONE variable to change<br/>keep reserved test examples untouched"]
+        gchange{"Data or training change?"}
+        m7b --> gchange
+    end
+    g7{"Validation results understood<br/>and ready to freeze?<br/>Documented plateaus may proceed"}
+
+    subgraph M8["8. Local demo · 1 session"]
+        m8a["CLI: note in → JSON + evidence out<br/>schema/evidence validation, demo suite"]
+    end
+    g8{"Saved model runs on new notes<br/>and exposes invalid output?"}
+
+    subgraph M9["9. Final evaluation · 1 session"]
+        gready{"Reproducible prep + training,<br/>checkpoint reload, CLI, and<br/>end-to-end trace verified?"}
+        m9prep["Complete readiness checks on design or validation examples<br/>resolve issues before freezing"]
+        m9a["Freeze settings"]
+        m9b["Evaluate ONCE on reserved test set<br/>model vs rule baseline"]
+        m9c["Report: metrics, limitations, next decision"]
+        gready -- no --> m9prep --> gready
+        gready -- yes --> m9a
+        m9a --> m9b --> m9c
+    end
+    g9{"Report and reproduction instructions complete?<br/>Frozen test results preserved"}
+
+    release(["First release complete<br/>engineering done; quality targets<br/>≥95% schema-valid, ≥0.85 strict F1<br/>reported separately"])
+
+    subgraph EXT["Later extensions"]
+        ea["A1. Controlled pretraining<br/>documented reuse policy<br/>same architecture + tokenizer<br/>pretrained vs random init"]
+        ea2["A2. Tokenizer and scale<br/>one variable per experiment<br/>benchmark each config first"]
+        eb["B. MIMIC adaptation<br/>continued pretraining, local only<br/>annotated real-note eval"]
+        ec["C. EHR tasks<br/>ICD-10 coding, LoRA radiology impressions"]
+        ed["D. Timelines, FHIR, terminology"]
+        ea --> ea2 --> eb --> ec
+    end
+
+    subgraph OUT["Out of scope"]
+        o1["1B+ models"]
+        o2["Diagnosis, treatment,<br/>patient-facing use"]
+        o3["Production EHR integration"]
+        o4["General medical chatbot"]
+        o5["Credentialed data to online services"]
+    end
+
+    start --> M0 --> g0
+    g0 -- no --> M0
+    g0 -- yes --> M1 --> g1
+    g0 -. waits .-> approval --> dua
+    g1 -- no --> M1
+    g1 -- yes --> M2 --> g2
+    g2 -- no --> M2
+    g2 -- yes --> M3 --> g3
+    g3 -- no --> M3
+    g3 -- yes --> M4 --> g4
+    g4 -- no --> M4
+    g4 -- yes --> m5a
+    m5b --> g5
+    g5 -- "no: recheck masks + loop" --> M4
+    g5 -- yes --> m6config
+    g5 -- yes --> m6a
+    g5 -- yes --> m6f
+    m6c --> g6
+    g6 -- no --> M6
+    g6 -- yes --> m7a --> g7
+    g7 -- "no: another experiment needed" --> m7b
+    gchange -- data --> M3
+    gchange -- training --> m5a
+    g7 -- yes --> M8 --> g8
+    g8 -- no --> M8
+    g8 -- yes --> gready
+    m9c --> g9
+    g9 -- "no: finish documentation only" --> m9c
+    g9 -- yes --> release
+    release -.-> ea
+    release -.-> ed
+    dua -.-> eb
+    dua -.-> ec
+    release ~~~ OUT
+
+    classDef gate fill:#fff4d6,stroke:#b8860b,color:#000
+    classDef wait fill:#e8f0fe,stroke:#4a6fa5,color:#000
+    classDef later fill:#f2f2f2,stroke:#888,stroke-dasharray:4 3,color:#333
+    classDef terminal fill:#dff0d8,stroke:#3c763d,color:#000
+    class g0,g1,g2,g3,g4,g5,g6,g7,g8,g9,gchange,gready,m4b gate
+    class approval,dua wait
+    class ea,ea2,eb,ec,ed,o1,o2,o3,o4,o5 later
+    class start,release terminal

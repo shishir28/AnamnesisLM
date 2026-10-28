@@ -1,0 +1,38 @@
+# Repository-wide Compose entry point. Web, API, and database services follow
+# when their applications, dependencies, and migrations are implemented.
+services:
+  synthea:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: tools/synthea/Dockerfile
+    image: anamnesislm-synthea:4.0.0
+    # Match the host user for writable, non-root-owned bind-mounted output.
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx${SYNTHEA_HEAP:-2g}"
+    volumes:
+      - ./llm/data/raw/synthea:/output
+    command:
+      - -p
+      - "100"
+      - -s
+      - "42"
+      - -cs
+      - "42"
+      - -r
+      - "20250101"
+      - -e
+      - "20250101"
+      - --exporter.baseDirectory=/output
+      - --exporter.fhir.export=true
+      - --exporter.csv.export=false
+    network_mode: none
+    # Java logging resolves the local hostname even without external networking.
+    hostname: synthea
+    extra_hosts:
+      - "synthea:127.0.0.1"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: "no"

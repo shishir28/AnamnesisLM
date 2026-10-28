@@ -1,0 +1,71 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+/secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build / tests
+build/
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# Datasets and run artifacts; preserve directory placeholders
+/llm/data/**
+!/llm/data/**/
+!/llm/data/**/.gitkeep
+/llm/checkpoints/**
+!/llm/checkpoints/**/
+!/llm/checkpoints/**/.gitkeep
+/llm/experiments/runs/**
+!/llm/experiments/runs/**/
+!/llm/experiments/runs/**/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.gguf
+
+# Local database storage / dumps
+/postgres-data/
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+
+# Editor / system
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+.ipynb_checkpoints/
