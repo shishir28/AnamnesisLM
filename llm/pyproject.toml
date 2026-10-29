@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anamnesislm"
+version = "0.1.0.dev0"
+description = "From-scratch language model for evidence-backed clinical fact extraction"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "tiktoken>=0.9,<1",
+]
+
+[project.optional-dependencies]
+training = [
+    "torch>=2.4,<3",
+]
+dev = [
+    "mypy>=1.15,<2",
+    "pytest>=8,<10",
+    "ruff>=0.11,<1",
+]
+
+[project.urls]
+Repository = "https://github.com/shishir28/AnamnesisLM"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/anamnesislm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

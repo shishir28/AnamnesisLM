@@ -12,6 +12,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+/llm/anamnesislm/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
