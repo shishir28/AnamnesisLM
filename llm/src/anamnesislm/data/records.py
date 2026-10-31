@@ -22,4 +22,7 @@ class EncodedRecord:
     - loss_mask: positions that contribute to response-only loss.
     """
 
-    pass
+    def __init__(self, input_ids: list[int], labels: list[int], loss_mask: list[bool]) -> None:
+        self.input_ids = input_ids
+        self.labels = labels
+        self.loss_mask = loss_mask
