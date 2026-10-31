@@ -6,11 +6,11 @@ if [[ "${1:-}" == "--help" ]]; then
   cat <<'HELP'
 Usage: ./tools/generate_synthea.sh
 
-Defaults: 2,000 requested patients per state (10,000 total), across
-California, Texas, Florida, Massachusetts, and New York.
+Defaults: 500 requested patients per state across all 50 US states (25,000 total).
+Each state gets its own seed (SEED + state index), so patients are unique across states.
 
 Optional environment variables:
-  PATIENTS_PER_STATE=2000
+  PATIENTS_PER_STATE=500
   SEED=42
   REFERENCE_DATE=20250101       # YYYYMMDD; also used as the simulation end date
   COHORT_NAME=my-new-cohort    # Must be a new directory name
@@ -32,7 +32,7 @@ fi
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PATIENTS_PER_STATE="${PATIENTS_PER_STATE:-2000}"
+PATIENTS_PER_STATE="${PATIENTS_PER_STATE:-500}"
 SEED="${SEED:-42}"
 REFERENCE_DATE="${REFERENCE_DATE:-20250101}"
 [[ "$PATIENTS_PER_STATE" =~ ^[1-9][0-9]{0,5}$ ]] || {
@@ -45,7 +45,14 @@ REFERENCE_DATE="${REFERENCE_DATE:-20250101}"
   echo 'REFERENCE_DATE must use YYYYMMDD format.' >&2; exit 2;
 }
 
-states=(California Texas Florida Massachusetts 'New York')
+states=(
+  Alabama Alaska Arizona Arkansas California Colorado Connecticut Delaware Florida Georgia
+  Hawaii Idaho Illinois Indiana Iowa Kansas Kentucky Louisiana Maine Maryland
+  Massachusetts Michigan Minnesota Mississippi Missouri Montana Nebraska Nevada
+  'New Hampshire' 'New Jersey' 'New Mexico' 'New York' 'North Carolina' 'North Dakota'
+  Ohio Oklahoma Oregon Pennsylvania 'Rhode Island' 'South Carolina' 'South Dakota'
+  Tennessee Texas Utah Vermont Virginia Washington 'West Virginia' Wisconsin Wyoming
+)
 total=$((10#$PATIENTS_PER_STATE * ${#states[@]}))
 COHORT_NAME="${COHORT_NAME:-cohort-${total}-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 [[ "$COHORT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || {
@@ -65,28 +72,37 @@ mkdir "$OUTPUT_DIR" || {
   exit 1
 }
 trap 'echo "Generation failed. Partial output is retained at: $OUTPUT_DIR" >&2' ERR
-printf 'synthea_version=4.0.0\nrequested_patients=%s\npatients_per_state=%s\npatient_seed=%s\nclinician_seed=%s\nreference_date=%s\nend_date=%s\nstates=%s\n' \
-  "$total" "$PATIENTS_PER_STATE" "$SEED" "$SEED" "$REFERENCE_DATE" "$REFERENCE_DATE" \
+printf 'synthea_version=4.0.0\nrequested_patients=%s\npatients_per_state=%s\nbase_seed=%s\nstate_seed=base_seed+state_index\nreference_date=%s\nend_date=%s\nstates=%s\n' \
+  "$total" "$PATIENTS_PER_STATE" "$SEED" "$REFERENCE_DATE" "$REFERENCE_DATE" \
   "${states[*]}" > "$OUTPUT_DIR/generation-settings.txt"
 
 docker compose --profile tools build synthea
-for state in "${states[@]}"; do
+for i in "${!states[@]}"; do
+  state="${states[$i]}"
   folder="${state// /_}"
   log="$OUTPUT_DIR/$folder.log"
-  echo "Generating $PATIENTS_PER_STATE requested patients in $state. Log: $log"
+  # A shared seed makes Synthea generate the same patient ids in every state.
+  state_seed=$((10#$SEED + i))
+  echo "Generating $PATIENTS_PER_STATE requested patients in $state (seed $state_seed). Log: $log"
   docker compose --profile tools run --rm synthea \
-    -p "$PATIENTS_PER_STATE" -s "$SEED" -cs "$SEED" \
+    -p "$PATIENTS_PER_STATE" -s "$state_seed" -cs "$state_seed" \
     -r "$REFERENCE_DATE" -e "$REFERENCE_DATE" \
     "--exporter.baseDirectory=/output/$COHORT_NAME/$folder" \
     --exporter.fhir.export=true \
     --exporter.csv.export=false \
     "$state" > "$log" 2>&1
   # Upstream can report export failures without a nonzero exit status.
-  if grep -Eq 'Exception|ERROR' "$log"; then
-    echo "Possible generation/export failure; inspect $log. Partial output retained." >&2
+  exported=$(find "$OUTPUT_DIR/$folder/fhir" -name '*.json' 2>/dev/null | wc -l)
+  if (( exported == 0 )); then
+    echo "No FHIR files exported for $state; inspect $log. Partial output retained." >&2
     exit 1
   fi
-  echo "Completed $state."
+  # Synthea sometimes fails a single patient (e.g. a NullPointerException) and carries on.
+  failures=$(grep -cE 'Exception|ERROR' "$log" || true)
+  if (( failures > 0 )); then
+    echo "Warning: $failures error line(s) in $log; $exported FHIR files exported anyway." >&2
+  fi
+  echo "Completed $state ($exported FHIR files)."
 done
 
 echo "Finished. Output: $OUTPUT_DIR"
