@@ -83,7 +83,7 @@ def test_can_memorise_one_batch(config: ModelConfig) -> None:
         return functional.cross_entropy(logits.reshape(-1, 50), tokens[:, 1:].reshape(-1))
 
     initial = loss().item()
-    for _ in range(50):
+    for _ in range(100):
         optimizer.zero_grad()
         step_loss = loss()
         torch.autograd.backward(step_loss)
