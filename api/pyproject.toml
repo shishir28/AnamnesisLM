@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anamnesis-api"
+version = "0.1.0"
+description = "Local FastAPI host for AnamnesisLM"
+requires-python = ">=3.11"
+dependencies = [
+    "anamnesislm[training]",
+    "fastapi>=0.115,<1",
+    "pydantic-settings>=2.7,<3",
+    "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28,<1", "pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.uv.sources]
+anamnesislm = { path = "../llm", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/anamnesis_api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

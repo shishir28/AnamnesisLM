@@ -17,4 +17,4 @@ PATIENTS_PER_STATE=2 ./tools/generate_synthea.sh
 
 The script can also be invoked by absolute path from another directory. It builds the image, runs the states sequentially, and keeps settings and per-state logs under ignored `llm/data/raw/synthea/<cohort>/`. Age, sex, and race/ethnicity follow Synthea's demographic distributions; balanced quotas are not guaranteed. Inspect logs and records before using the output.
 
-Use the repository-root `compose.yaml` as the shared Compose entry point. Web, API, and PostgreSQL services will be added as those components are implemented.
+Use the repository-root `compose.yaml` as the shared Compose entry point. It also provides the Next.js web and FastAPI services. PostgreSQL is not implemented.

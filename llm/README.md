@@ -1,6 +1,6 @@
 # LLM — from-scratch learning implementation
 
-Status: component directories only; no implemented model or training pipeline.
+Status: data preparation, tokenizer, single-head decoder-only Transformer, training, checkpoint loading, and CLI inference are implemented. Task-level evaluation and a rule baseline remain incomplete.
 
 ## Components
 
@@ -32,4 +32,4 @@ Use the book mapping in [Agent.md](../Agent.md) and milestones in the [plan](../
 
 Credentialed clinical data must stay outside this repository, not in these ignored folders. Ignore rules do not prevent agent access.
 
-Future packaging will make `anamnesislm` installable by the API. A training/CLI Dockerfile will be added when there is executable code and a measured device/dependency configuration.
+The package is installed by the [FastAPI app](../api/README.md), which hosts the checkpoint for the [Next.js demo](../web/README.md). Run both through the root `compose.yaml`; the API image uses CPU PyTorch. A dedicated training container is not implemented.

@@ -1,6 +1,52 @@
-# Repository-wide Compose entry point. Web, API, and database services follow
-# when their applications, dependencies, and migrations are implemented.
+# Local demo. Bind ports to loopback; use SSH forwarding for remote hosts.
 services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      ANAMNESIS_CHECKPOINT_PATH: /checkpoints/best.pt
+      ANAMNESIS_DEVICE: cpu
+      ANAMNESIS_MAX_NEW_TOKENS: "400"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    volumes:
+      - ${ANAMNESIS_CHECKPOINT_DIR:-./llm/checkpoints/extraction}:/checkpoints:ro
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
   synthea:
     profiles: [tools]
     build:

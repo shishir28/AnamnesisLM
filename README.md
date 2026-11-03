@@ -2,19 +2,55 @@
 
 A small decoder-only Transformer, trained from scratch to extract evidence-backed facts from synthetic clinical notes.
 
-**Status:** Synthea data generation works. Model, API, and web app are not implemented. Built for learning; not validated for clinical use.
+**Status:** data preparation, a small Transformer, training, CLI inference, FastAPI hosting, and a Next.js demo are implemented. Extraction quality is experimental. Built for learning; not validated for clinical use.
 
 ## Structure
 
 | Folder | Purpose |
 |---|---|
 | `llm/` | Data preparation, tokenizer, model, training, evaluation, inference |
-| `api/` | FastAPI model hosting and PostgreSQL access |
+| `api/` | FastAPI model hosting and output validation; no persistence yet |
 | `web/` | Next.js interface |
 | `tools/` | Synthea container and generation script |
 | `docs/` | Architecture and data policies |
 
-Planned request flow: Next.js → FastAPI → PyTorch model. Only FastAPI accesses PostgreSQL. Datasets and checkpoints stay in files, not database rows.
+Request flow: Next.js → same-origin server proxy → FastAPI → PyTorch model. No database is required for the demo.
+
+## Run the extraction app
+
+Requires Docker Compose and a trusted checkpoint at `llm/checkpoints/extraction/best.pt`. Checkpoints are local artifacts, not included in Git.
+
+```bash
+docker compose up --build -d api web
+```
+
+- Web: http://localhost:3000
+- API docs: http://localhost:8000/docs
+- Model status: http://localhost:8000/model
+
+Host ports are configurable; internal container ports remain unchanged:
+
+```bash
+WEB_PORT=3100 API_PORT=8100 docker compose up -d api web
+```
+
+This exposes the web at http://localhost:3100 and API docs at http://localhost:8100. Keep the same variable values for subsequent Compose commands, or set them in an ignored root `.env` file.
+
+The API loads the checkpoint once. Containers serve on CPU; CUDA Docker serving is not configured. Invalid model output, schema errors, and incorrect evidence offsets remain visible in the UI. No notes are stored.
+
+If accessing this host through SSH, run this on your local computer, then open http://localhost:3000:
+
+```bash
+ssh -N -L 3000:127.0.0.1:3000 user@host
+```
+
+```bash
+docker compose logs --tail 50 api web
+docker compose restart api  # Reload after replacing best.pt
+docker compose stop api web
+```
+
+If the checkpoint is absent or incompatible, the UI reports the model as unavailable. Use [API instructions](api/README.md) for alternate checkpoint paths, native CUDA serving, and request contracts; see [web instructions](web/README.md) for development and tests.
 
 ## Generate synthetic data
 
@@ -79,7 +115,7 @@ SYNTHEA_HEAP=4g \
 
 If execution permission is missing, use `bash tools/generate_synthea.sh`. On failure, inspect the printed state log. Partial output is retained; retry with a new cohort name. Check Docker access, output ownership, and available memory as needed.
 
-Synthea outputs structured patient histories, not our final note/JSON pairs. Next: write the Python reader and renderer, validate evidence offsets, and split by patient before generating examples.
+Synthea outputs structured patient histories, not final note/JSON pairs. The preparation script in `llm/scripts/prepare_extraction_data.py` renders those pairs and assigns deterministic patient splits. Training and serving are separate from Synthea generation.
 
 ## References
 
@@ -94,7 +130,7 @@ Learning reference: Sebastian Raschka's *Build a Large Language Model (From Scra
 
 ## Containers and safety
 
-Root `compose.yaml` currently contains only the optional Synthea `tools` service. Web, API, PostgreSQL, and training services will follow their implementations.
+Root `compose.yaml` provides `web`, `api`, and optional `synthea` (`tools` profile) services. Web/API ports bind to loopback only. PostgreSQL and training containers are not implemented. Do not expose this unauthenticated demo publicly.
 
 Never expose restricted clinical data to online agents. Keep it outside the repository with verified access controls. Git/Docker ignore rules are not security boundaries. Use synthetic notes in demonstrations.
 
