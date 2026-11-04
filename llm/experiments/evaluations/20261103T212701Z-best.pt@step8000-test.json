@@ -1,0 +1,64 @@
+{
+  "created_at": "2026-11-03T21:27:01+00:00",
+  "git_commit": "ec9a4c6595feca3648e34e16ad208957b200065e",
+  "git_dirty": true,
+  "checkpoint": "checkpoints/extraction/best.pt",
+  "split": "test",
+  "limit": null,
+  "num_dropped_overlap": 121,
+  "max_new_tokens": 400,
+  "device": "cuda",
+  "report": {
+    "model_version": "best.pt@step8000",
+    "num_records": 2667,
+    "num_valid_json": 2626,
+    "valid_json_rate": 0.9846269216347957,
+    "overall": {
+      "true_positives": 7534,
+      "false_positives": 180,
+      "false_negatives": 309,
+      "precision": 0.9766658024371273,
+      "recall": 0.9606018105316843,
+      "f1": 0.9685672044738702
+    },
+    "per_kind": {
+      "allergy": {
+        "true_positives": 429,
+        "false_positives": 22,
+        "false_negatives": 9,
+        "precision": 0.9512195121951219,
+        "recall": 0.9794520547945206,
+        "f1": 0.9651293588301462
+      },
+      "condition": {
+        "true_positives": 5392,
+        "false_positives": 121,
+        "false_negatives": 224,
+        "precision": 0.9780518773807364,
+        "recall": 0.9601139601139601,
+        "f1": 0.9689999101446671
+      },
+      "invalid": {
+        "true_positives": 0,
+        "false_positives": 2,
+        "false_negatives": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "medication": {
+        "true_positives": 1713,
+        "false_positives": 35,
+        "false_negatives": 76,
+        "precision": 0.9799771167048055,
+        "recall": 0.9575181665735047,
+        "f1": 0.9686174724342662
+      }
+    },
+    "num_unsupported": 80,
+    "num_omitted": 309,
+    "num_failed_records": 224,
+    "total_seconds": 1499.2949350371491,
+    "seconds_per_record": 0.5621653299726843
+  }
+}

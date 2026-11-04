@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+
+
 class ExtractionRecord:
     """Planned representation of one note and its expected JSON response.
 
@@ -26,3 +30,21 @@ class EncodedRecord:
         self.input_ids = input_ids
         self.labels = labels
         self.loss_mask = loss_mask
+
+
+def load_records(path: Path) -> list[ExtractionRecord]:
+    """Read one split's records.jsonl into ExtractionRecords, skipping blank lines."""
+    records: list[ExtractionRecord] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not (line := line.strip()):
+                continue
+            record_dict = json.loads(line)
+            records.append(
+                ExtractionRecord(
+                    note=record_dict["note"],
+                    expected_json=record_dict["expected_json"],
+                    record_id=record_dict["record_id"],
+                )
+            )
+    return records

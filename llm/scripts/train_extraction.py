@@ -5,14 +5,13 @@ The test split is never loaded here; it is used once, by a separate evaluation s
 """
 
 import argparse
-import json
 import time
 from dataclasses import replace
 from pathlib import Path
 
 from anamnesislm.data.config import PipelineConfig
 from anamnesislm.data.data_pipeline import ExtractionDataPipeline
-from anamnesislm.data.records import ExtractionRecord
+from anamnesislm.data.records import load_records
 from anamnesislm.model.config import ModelConfig
 from anamnesislm.model.gpt import GPTModel
 from anamnesislm.tokenization.basic_tokenizer import BasicTokenizer
@@ -22,23 +21,6 @@ from anamnesislm.training.trainer import train as trainer_train
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data/processed/extraction"
-
-
-def load_records(path: Path) -> list[ExtractionRecord]:
-    """Read one split's records.jsonl into ExtractionRecords. Move to records.py."""
-    with path.open("r", encoding="utf-8") as f:
-        records: list[ExtractionRecord] = []
-        for line in f:
-            if not (line := line.strip()):
-                continue
-            record_dict = json.loads(line)
-            record = ExtractionRecord(
-                note=record_dict["note"],
-                expected_json=record_dict["expected_json"],
-                record_id=record_dict["record_id"],
-            )
-            records.append(record)
-    return records
 
 
 def _check_configs(
