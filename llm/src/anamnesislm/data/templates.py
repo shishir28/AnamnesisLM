@@ -66,9 +66,9 @@ TEMPLATE_FAMILIES: list[dict[str, str]] = [
         "medication": "Current prescription: {mention}.",
         "medication_with_frequency": "Current prescription: {mention}, taken {frequency}.",
         "allergy": "Known allergy to {mention}.",
-        "symptom_affirmed": "The patient reports {mention}.",
-        "symptom_negated": "The patient reports no {mention}.",
-        "symptom_uncertain": "The patient may have {mention}.",
+        "symptom_affirmed": "Symptoms include {mention}.",
+        "symptom_negated": "Symptoms do not include {mention}.",
+        "symptom_uncertain": "{mention} cannot be ruled out.",
         "family": "{family_member}'s history includes {mention}.",
     },
 ]

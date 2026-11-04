@@ -141,16 +141,23 @@ def _render(header: str, facts: list[Fact]) -> str:
     return note
 
 
-def build_record(patient_bundle: PatientBundle) -> ExtractionRecord:
+def build_record(
+    patient_bundle: PatientBundle, template_family: dict[str, str] | None = None
+) -> ExtractionRecord:
     """Render one patient bundle into a note and the facts that note states.
 
     Labels come from the rendered text, never from the raw FHIR fields alone.
+    template_family defaults to a random training family; pass the held-out family to build
+    the generalisation test set.
     """
     patient = patient_bundle.patient
     record_id = patient_bundle.patient_id
     # Deterministic choices: seed from the patient id
     rng = random.Random(sha256(record_id.encode()).digest())
-    template_family = rng.choice(TRAIN_FAMILIES)
+    # Always draw, even when a family is given, so every later random choice (conditions,
+    # augmentation) stays the same: a held-out record differs from its test twin only in wording.
+    default_family = rng.choice(TRAIN_FAMILIES)
+    template_family = template_family or default_family
 
     if patient.birth_date is None or patient.gender is None:
         raise ValueError(f"Patient {record_id} is missing birth_date or gender.")

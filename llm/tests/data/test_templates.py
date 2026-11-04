@@ -2,7 +2,7 @@ from string import Formatter
 
 import pytest
 
-from anamnesislm.data.templates import TEMPLATE_FAMILIES
+from anamnesislm.data.templates import HOLDOUT_FAMILY, TEMPLATE_FAMILIES, TRAIN_FAMILIES
 
 TEMPLATE_KEYS = [key for key in TEMPLATE_FAMILIES[0] if key != "name"]
 EXTRA_PLACEHOLDERS = {"medication_with_frequency": ["frequency"], "family": ["family_member"]}
@@ -45,3 +45,18 @@ def test_mention_appears_verbatim_once(name: str, key: str, template: str) -> No
 
     assert sentence.count(mention) == 1
     assert sentence.endswith(".")
+
+
+def test_holdout_family_exists_and_is_not_trained_on() -> None:
+    assert HOLDOUT_FAMILY in [family["name"] for family in TEMPLATE_FAMILIES]
+    assert HOLDOUT_FAMILY not in [family["name"] for family in TRAIN_FAMILIES]
+
+
+def test_holdout_wording_never_appears_in_training_templates() -> None:
+    """Otherwise the held-out test set would partly measure wording the model already saw."""
+    [holdout] = [family for family in TEMPLATE_FAMILIES if family["name"] == HOLDOUT_FAMILY]
+    trained = {family[key] for family in TRAIN_FAMILIES for key in TEMPLATE_KEYS}
+
+    shared = [key for key in TEMPLATE_KEYS if holdout[key] in trained]
+
+    assert shared == []

@@ -1,0 +1,56 @@
+{
+  "created_at": "2026-11-04T03:52:49+00:00",
+  "git_commit": "0e2aaebaefecc514da96485833e31e9a414d548d",
+  "git_dirty": true,
+  "checkpoint": "checkpoints/extraction/best.pt",
+  "split": "test_holdout",
+  "limit": null,
+  "num_dropped_overlap": 24,
+  "max_new_tokens": 400,
+  "device": "cuda",
+  "report": {
+    "model_version": "best.pt@step8000",
+    "num_records": 2754,
+    "num_valid_json": 2711,
+    "valid_json_rate": 0.9843863471314451,
+    "overall": {
+      "true_positives": 6333,
+      "false_positives": 1657,
+      "false_negatives": 1598,
+      "precision": 0.7926157697121402,
+      "recall": 0.7985121674442063,
+      "f1": 0.7955530431505559
+    },
+    "per_kind": {
+      "allergy": {
+        "true_positives": 282,
+        "false_positives": 3,
+        "false_negatives": 159,
+        "precision": 0.9894736842105263,
+        "recall": 0.6394557823129252,
+        "f1": 0.7768595041322315
+      },
+      "condition": {
+        "true_positives": 4492,
+        "false_positives": 1611,
+        "false_negatives": 1205,
+        "precision": 0.7360314599377356,
+        "recall": 0.7884851676320871,
+        "f1": 0.7613559322033899
+      },
+      "medication": {
+        "true_positives": 1559,
+        "false_positives": 43,
+        "false_negatives": 234,
+        "precision": 0.9731585518102372,
+        "recall": 0.8694924707194646,
+        "f1": 0.9184094256259205
+      }
+    },
+    "num_unsupported": 261,
+    "num_omitted": 1598,
+    "num_failed_records": 1582,
+    "total_seconds": 1633.809847956989,
+    "seconds_per_record": 0.5932497632378319
+  }
+}

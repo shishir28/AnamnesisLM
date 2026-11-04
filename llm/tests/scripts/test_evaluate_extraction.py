@@ -245,3 +245,11 @@ def test_failures_are_printed_only_with_show_errors(
     out = capsys.readouterr().out
     assert "Failed records (1):" in out
     assert "Note: Note without asthma fact." in out
+
+
+def test_holdout_split_can_be_scored(script: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_split(script.DATA_DIR, "test_holdout", ["Present illness: Asthma."])
+
+    _run(script, monkeypatch, "--split", "test_holdout")
+
+    assert FakeExtractor.notes == ["Present illness: Asthma."]

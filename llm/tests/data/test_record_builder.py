@@ -175,11 +175,47 @@ def test_augmented_facts_are_not_always_last() -> None:
     assert not all(positions)
 
 
-def test_holdout_family_is_never_rendered() -> None:
-    [holdout] = [f for f in TEMPLATE_FAMILIES if f["name"] == HOLDOUT_FAMILY]
-    holdout_sentence = holdout["medication"].format(mention="Metformin 500 MG Oral Tablet")
+HOLDOUT = next(f for f in TEMPLATE_FAMILIES if f["name"] == HOLDOUT_FAMILY)
+HOLDOUT_MEDICATION = HOLDOUT["medication"].format(mention="Metformin 500 MG Oral Tablet")
 
-    assert all(holdout_sentence not in build_record(b).note for b in MANY_PATIENTS)
+
+def _labels(facts: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
+    """Everything about a fact except where and how the note words it."""
+    return [
+        (f["kind"], f["mention"], f["assertion"], f["experiencer"], f["temporality"]) for f in facts
+    ]
+
+
+def test_holdout_family_is_not_rendered_by_default() -> None:
+    assert all(HOLDOUT_MEDICATION not in build_record(b).note for b in MANY_PATIENTS)
+
+
+def test_holdout_family_is_used_when_given() -> None:
+    assert all(
+        HOLDOUT_MEDICATION in build_record(b, template_family=HOLDOUT).note
+        for b in MANY_PATIENTS[:50]
+    )
+
+
+@pytest.mark.parametrize("patient_bundle", MANY_PATIENTS[:50], ids=lambda b: b.patient_id)
+def test_holdout_record_has_the_same_facts_in_different_words(
+    patient_bundle: PatientBundle,
+) -> None:
+    default = build_record(patient_bundle)
+    holdout = build_record(patient_bundle, template_family=HOLDOUT)
+
+    assert holdout.note != default.note
+    assert _labels(json.loads(holdout.expected_json)["facts"]) == _labels(
+        json.loads(default.expected_json)["facts"]
+    )
+
+
+@pytest.mark.parametrize("patient_bundle", MANY_PATIENTS[:50], ids=lambda b: b.patient_id)
+def test_holdout_offsets_point_at_the_evidence(patient_bundle: PatientBundle) -> None:
+    record = build_record(patient_bundle, template_family=HOLDOUT)
+
+    for fact in json.loads(record.expected_json)["facts"]:
+        assert record.note[fact["evidence_start"] : fact["evidence_end"]] == fact["evidence"]
 
 
 # selection helpers

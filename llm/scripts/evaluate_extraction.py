@@ -36,7 +36,7 @@ EVALUATIONS_DIR = PROJECT_ROOT / "experiments/evaluations"
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
-    parser.add_argument("--split", choices=["test", "validation"], default="test")
+    parser.add_argument("--split", choices=["test", "test_holdout", "validation"], default="test")
     parser.add_argument("--limit", type=int, help="score only the first N records")
     parser.add_argument(
         "--output",

@@ -6,7 +6,8 @@ split by hashing their id, renders a note and expected facts, and writes:
     data/processed/extraction/
     ├── train/records.jsonl
     ├── validation/records.jsonl
-    └── test/records.jsonl
+    ├── test/records.jsonl
+    └── test_holdout/records.jsonl   same test patients, worded with the held-out template family
 
 Training reads only these JSONL files, never the raw FHIR folders.
 """
@@ -19,8 +20,10 @@ import msgspec
 
 from anamnesislm.data.config import PipelineConfig
 from anamnesislm.data.record_builder import build_record
+from anamnesislm.data.records import ExtractionRecord
 from anamnesislm.data.splits import SPLITS, assign_split
 from anamnesislm.data.synthea import iter_bundle_files, read_patient_bundle
+from anamnesislm.data.templates import HOLDOUT_FAMILY, TEMPLATE_FAMILIES
 from anamnesislm.tokenization.basic_tokenizer import BasicTokenizer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +32,7 @@ OUTPUT_DIR = PROJECT_ROOT / "data/processed/extraction"
 # Room for the instruction prompt and EOS added at training time; replace with the
 # real prompt length once processor.py defines it.
 PROMPT_TOKEN_RESERVE = 32
+HOLDOUT_SPLIT = "test_holdout"
 
 
 def _latest_cohort() -> Path:
@@ -46,19 +50,26 @@ def main() -> int:
 
     tokenizer = BasicTokenizer()
     token_limit = PipelineConfig().max_sequence_length - PROMPT_TOKEN_RESERVE
-    counts = dict.fromkeys(SPLITS, 0)
+    holdout_family = next(f for f in TEMPLATE_FAMILIES if f["name"] == HOLDOUT_FAMILY)
+    counts = dict.fromkeys([*SPLITS, HOLDOUT_SPLIT], 0)
     skipped = 0
     too_long = 0
 
-    for split in SPLITS:
+    for split in counts:
         (OUTPUT_DIR / split).mkdir(parents=True, exist_ok=True)
 
     with (
         (OUTPUT_DIR / "train/records.jsonl").open("w", encoding="utf-8") as train_file,
         (OUTPUT_DIR / "validation/records.jsonl").open("w", encoding="utf-8") as validation_file,
         (OUTPUT_DIR / "test/records.jsonl").open("w", encoding="utf-8") as test_file,
+        (OUTPUT_DIR / HOLDOUT_SPLIT / "records.jsonl").open("w", encoding="utf-8") as holdout_file,
     ):
-        writers = {"train": train_file, "validation": validation_file, "test": test_file}
+        writers = {
+            "train": train_file,
+            "validation": validation_file,
+            "test": test_file,
+            HOLDOUT_SPLIT: holdout_file,
+        }
 
         for path in iter_bundle_files(cohort_dir):
             try:
@@ -70,24 +81,28 @@ def main() -> int:
             if patient_bundle is None:  # hospital / practitioner information files
                 continue
 
+            split = assign_split(patient_bundle.patient_id)
             try:
-                record = build_record(patient_bundle)
+                records: dict[str, ExtractionRecord] = {split: build_record(patient_bundle)}
+                if split == "test":
+                    records[HOLDOUT_SPLIT] = build_record(patient_bundle, holdout_family)
             except ValueError as e:  # e.g. missing birth date or gender
                 print(f"Could not build record for {path}: {e}")
                 skipped += 1
                 continue
-            # Longer records would be truncated in training, cutting off the JSON.
-            if len(tokenizer.encode(record.note + record.expected_json)) > token_limit:
-                too_long += 1
-                continue
-            split = assign_split(patient_bundle.patient_id)
-            line = {
-                "record_id": record.record_id,
-                "note": record.note,
-                "expected_json": record.expected_json,
-            }
-            writers[split].write(json.dumps(line) + "\n")
-            counts[split] += 1
+
+            for split_name, record in records.items():
+                # Longer records would be truncated in training, cutting off the JSON.
+                if len(tokenizer.encode(record.note + record.expected_json)) > token_limit:
+                    too_long += 1
+                    continue
+                line = {
+                    "record_id": record.record_id,
+                    "note": record.note,
+                    "expected_json": record.expected_json,
+                }
+                writers[split_name].write(json.dumps(line) + "\n")
+                counts[split_name] += 1
 
     print(f"Records per split: {counts}; skipped files: {skipped}")
     print(f"Records over {token_limit} tokens, dropped: {too_long}")
