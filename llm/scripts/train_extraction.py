@@ -9,6 +9,8 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+import torch
+
 from anamnesislm.data.config import PipelineConfig
 from anamnesislm.data.data_pipeline import ExtractionDataPipeline
 from anamnesislm.data.records import load_records
@@ -51,11 +53,20 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         help="override TrainingConfig.num_epochs (e.g. 100 with --limit 16)",
     )
+    parser.add_argument("--seed", type=int, help="override TrainingConfig.seed (default 42)")
+    parser.add_argument("--num-layers", type=int, help="override ModelConfig.num_layers")
+    parser.add_argument(
+        "--compact-response",
+        action="store_true",
+        help="train the model to write only output_format.MODEL_FIELDS",
+    )
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
     if args.epochs is not None and args.epochs < 1:
         parser.error("--epochs must be a positive integer")
+    if args.num_layers is not None and args.num_layers < 1:
+        parser.error("--num-layers must be a positive integer")
     return args
 
 
@@ -65,11 +76,13 @@ def main() -> int:
 
     args = _parse_args()
 
-    pipeline_config = PipelineConfig()
+    pipeline_config = PipelineConfig(compact_response=args.compact_response)
     tokenizer = BasicTokenizer()
     pipeline = ExtractionDataPipeline(config=pipeline_config, tokenizer=tokenizer)
 
     model_config = ModelConfig()
+    if args.num_layers is not None:
+        model_config = replace(model_config, num_layers=args.num_layers)
     _check_configs(pipeline_config, model_config, tokenizer)
 
     train_records = load_records(DATA_DIR / "train/records.jsonl")[: args.limit]
@@ -78,11 +91,15 @@ def main() -> int:
     train_loader = pipeline.build_dataloader(train_records, shuffle=True)
     validation_loader = pipeline.build_dataloader(validation_records, shuffle=False)
 
-    model = GPTModel(config=model_config)
     checkpoint_dir = PROJECT_ROOT / "checkpoints/extraction"
     training_config = TrainingConfig(checkpoint_dir=checkpoint_dir)
     if args.epochs is not None:
         training_config = replace(training_config, num_epochs=args.epochs)
+    if args.seed is not None:
+        training_config = replace(training_config, seed=args.seed)
+    # Seed before building the model, so its initial weights are reproducible too.
+    torch.manual_seed(training_config.seed)
+    model = GPTModel(config=model_config)
     trainer_train(
         model,
         train_loader,

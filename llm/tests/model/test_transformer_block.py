@@ -1,6 +1,9 @@
+from dataclasses import replace
+
 import torch
 from torch import nn
 
+from anamnesislm.model.attention import CausalSelfAttention, MultiHeadAttention
 from anamnesislm.model.config import ModelConfig
 from anamnesislm.model.transformer_block import TransformerBlock
 
@@ -24,8 +27,10 @@ def test_residuals_pass_the_input_through_when_sublayers_output_zero(
     block = TransformerBlock(config)
     last_feed_forward_layer = block.feedforward.layers[-1]
     assert isinstance(last_feed_forward_layer, nn.Linear)
+    assert isinstance(block.attention, MultiHeadAttention)
     with torch.no_grad():
-        block.attention.W_value.weight.zero_()
+        block.attention.out_proj.weight.zero_()
+        block.attention.out_proj.bias.zero_()
         last_feed_forward_layer.weight.zero_()
         last_feed_forward_layer.bias.zero_()
     x = torch.randn(2, 5, 16)
@@ -39,3 +44,13 @@ def test_gradients_reach_every_weight(config: ModelConfig) -> None:
     block(torch.randn(2, 5, 16)).sum().backward()
 
     assert all(p.grad is not None for p in block.parameters())
+
+
+def test_multi_head_attention_is_the_default(config: ModelConfig) -> None:
+    assert isinstance(TransformerBlock(config).attention, MultiHeadAttention)
+
+
+def test_single_head_attention_for_old_checkpoints(config: ModelConfig) -> None:
+    block = TransformerBlock(replace(config, multi_head=False))
+
+    assert isinstance(block.attention, CausalSelfAttention)

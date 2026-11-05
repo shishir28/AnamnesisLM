@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader
 
 from anamnesislm.data.config import PipelineConfig
 from anamnesislm.data.dataset import EncodedDataset
+from anamnesislm.data.output_format import compact_response
 from anamnesislm.data.records import EncodedRecord, ExtractionRecord
 from anamnesislm.tokenization.tokenizer import Tokenizer
 
@@ -35,6 +36,8 @@ class ExtractionDataPipeline:
         """Create prompt and response strings for one extraction record."""
         prompt = f"Extract facts from this note:\n{record.note}\n\nResponse:"
         response = record.expected_json
+        if self.config.compact_response:
+            response = compact_response(response)
         return prompt, response
 
     def encode_record(self, prompt: str, response: str) -> EncodedRecord:

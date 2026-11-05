@@ -11,7 +11,7 @@ docker compose up --build -d api web
 curl http://localhost:8000/model
 ```
 
-The default image uses CPU PyTorch, runs as a non-root user, and mounts `llm/checkpoints/extraction/` read-only at `/checkpoints`. It expects `best.pt`; weights are not bundled. Use trusted local checkpoints only.
+The default image uses CPU PyTorch, runs as a non-root user, and mounts `llm/checkpoints/extraction/` read-only at `/checkpoints`. It loads `v9-second-seed.pt` (set `ANAMNESIS_CHECKPOINT_FILE` to choose another file); weights are not bundled. Use trusted local checkpoints only.
 
 Choose another directory before starting:
 
@@ -35,7 +35,7 @@ Optional settings in `api/.env` or the environment:
 
 | Variable | Default |
 |---|---|
-| `ANAMNESIS_CHECKPOINT_PATH` | Repository `llm/checkpoints/extraction/best.pt` |
+| `ANAMNESIS_CHECKPOINT_PATH` | Repository `llm/checkpoints/extraction/v9-second-seed.pt`. Use a named checkpoint, not `best.pt`: every training run overwrites `best.pt`. |
 | `ANAMNESIS_DEVICE` | `auto` (`cpu` or `cuda` can be selected) |
 | `ANAMNESIS_MAX_NEW_TOKENS` | `400` |
 

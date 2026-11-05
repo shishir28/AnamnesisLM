@@ -39,7 +39,7 @@ def test_vocab_mismatch_with_tokenizer_is_rejected() -> None:
         _script()._check_configs(PipelineConfig(), ModelConfig(vocab_size=1000), BasicTokenizer())
 
 
-@pytest.mark.parametrize("option", ["--limit", "--epochs"])
+@pytest.mark.parametrize("option", ["--limit", "--epochs", "--num-layers"])
 def test_non_positive_options_are_rejected(option: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.argv", ["train_extraction.py", option, "0"])
 
@@ -52,4 +52,14 @@ def test_options_default_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
 
     args = _script()._parse_args()
 
-    assert (args.limit, args.epochs) == (None, None)
+    assert (args.limit, args.epochs, args.seed, args.num_layers) == (None, None, None, None)
+    assert not args.compact_response
+
+
+def test_experiment_options_are_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    argv = ["train_extraction.py", "--seed", "7", "--num-layers", "8", "--compact-response"]
+    monkeypatch.setattr("sys.argv", argv)
+
+    args = _script()._parse_args()
+
+    assert (args.seed, args.num_layers, args.compact_response) == (7, 8, True)

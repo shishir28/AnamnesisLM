@@ -2,6 +2,7 @@
 
 from typing import cast
 
+import pytest
 import torch
 from torch import nn
 
@@ -15,6 +16,7 @@ from anamnesislm.tokenization.basic_tokenizer import BasicTokenizer
 class _Config:
     def __init__(self, context_length: int) -> None:
         self.context_length = context_length
+        self.multi_head = False  # no KV cache: generate re-sends the window each step
 
 
 class ScriptedModel(nn.Module):
@@ -142,7 +144,8 @@ def test_valid_output_becomes_facts() -> None:
 
     result = extractor.extract("Possible fever.")
 
-    assert result.facts == [{"kind": "condition", "mention": "fever"}]
+    [fact] = result.facts or []
+    assert (fact["kind"], fact["mention"]) == ("condition", "fever")
     assert result.error is None
     assert result.model_version == "test@step1"
 
@@ -180,3 +183,93 @@ def test_output_cut_off_by_max_new_tokens_is_invalid() -> None:
 
     assert result.facts is None
     assert result.error is not None and "JSONDecodeError" in result.error
+
+
+# KV cache
+
+
+def _generate_without_cache(
+    model: GPTModel, prompt: list[int], max_new_tokens: int, eos: int
+) -> list[int]:
+    """The original loop: re-run the last context_length tokens every step."""
+    tokens, new_ids = list(prompt), []
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            window = torch.tensor([tokens[-model.config.context_length :]])
+            next_id = int(model(window)[0, -1].argmax())
+            if next_id == eos:
+                break
+            tokens.append(next_id)
+            new_ids.append(next_id)
+    return new_ids
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_cached_generation_matches_uncached(seed: int) -> None:
+    torch.manual_seed(seed)
+    model = GPTModel(ModelConfig(vocab_size=30, context_length=32, embedding_dim=16)).eval()
+    prompt = torch.randint(1, 30, (6,)).tolist()
+
+    assert generate(model, prompt, 20, eos_token_id=0) == _generate_without_cache(
+        model, prompt, 20, eos=0
+    )
+
+
+def test_cached_generation_matches_uncached_past_the_context_length() -> None:
+    """Once the sequence outgrows the context, generate falls back to the sliding window."""
+    torch.manual_seed(0)
+    model = GPTModel(ModelConfig(vocab_size=30, context_length=8, embedding_dim=16)).eval()
+    prompt = [3, 1, 4, 1, 5]
+
+    cached = generate(model, prompt, 12, eos_token_id=-1)  # -1: never stop early
+
+    assert len(cached) == 12
+    assert cached == _generate_without_cache(model, prompt, 12, eos=-1)
+
+
+def test_single_head_models_still_generate() -> None:
+    torch.manual_seed(0)
+    model = GPTModel(
+        ModelConfig(vocab_size=30, context_length=32, embedding_dim=16, multi_head=False)
+    ).eval()
+
+    assert generate(model, [1, 2, 3], 10, eos_token_id=0) == _generate_without_cache(
+        model, [1, 2, 3], 10, eos=0
+    )
+
+
+# extract: normalised input, located evidence
+
+
+def test_model_reads_the_note_with_normalised_whitespace() -> None:
+    extractor, model = _extractor('{"facts": []}')
+
+    extractor.extract("Possible\n  fever.")
+
+    assert TOKENIZER.decode(model.inputs[0]) == build_prompt("Possible fever.")
+
+
+def test_extract_sets_offsets_into_the_original_note() -> None:
+    note = "Patient is a 40-year-old male. The patient\ndenies any fever."
+    extractor, _ = _extractor(
+        '{"facts": [{"kind": "condition", "mention": "fever", '
+        '"evidence": "The patient denies any fever.", "evidence_start": 3, "evidence_end": 9}]}'
+    )
+
+    [fact] = extractor.extract(note).facts or []
+
+    assert note[fact["evidence_start"] : fact["evidence_end"]] == fact["evidence"]
+    assert fact["evidence"] == "The patient\ndenies any fever."
+
+
+def test_compact_model_output_is_completed_to_the_full_fact() -> None:
+    note = "Patient is a 40-year-old male. Denies fever."
+    extractor, _ = _extractor(
+        '{"facts": [{"kind": "condition", "mention": "fever", "assertion": "negated", '
+        '"experiencer": "patient", "temporality": "current", "evidence": "Denies fever."}]}'
+    )
+
+    [fact] = extractor.extract(note).facts or []
+
+    assert note[fact["evidence_start"] : fact["evidence_end"]] == "Denies fever."
+    assert (fact["dose"], fact["unit"], fact["route"], fact["frequency"]) == (None,) * 4

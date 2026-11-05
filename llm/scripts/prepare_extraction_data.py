@@ -7,13 +7,16 @@ split by hashing their id, renders a note and expected facts, and writes:
     ├── train/records.jsonl
     ├── validation/records.jsonl
     ├── test/records.jsonl
-    └── test_holdout/records.jsonl   same test patients, worded with the held-out template family
+    ├── test_holdout/records.jsonl        same test patients and facts, HOLDOUT_TEMPLATES wording
+    └── test_unseen_names/records.jsonl   same test patients and facts, every name made up
+                                          from syllables never used in training
 
 Training reads only these JSONL files, never the raw FHIR folders.
 """
 
 import argparse
 import json
+from contextlib import ExitStack
 from pathlib import Path
 
 import msgspec
@@ -23,7 +26,7 @@ from anamnesislm.data.record_builder import build_record
 from anamnesislm.data.records import ExtractionRecord
 from anamnesislm.data.splits import SPLITS, assign_split
 from anamnesislm.data.synthea import iter_bundle_files, read_patient_bundle
-from anamnesislm.data.templates import HOLDOUT_FAMILY, TEMPLATE_FAMILIES
+from anamnesislm.data.templates import HOLDOUT_TEMPLATES
 from anamnesislm.tokenization.basic_tokenizer import BasicTokenizer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +36,7 @@ OUTPUT_DIR = PROJECT_ROOT / "data/processed/extraction"
 # real prompt length once processor.py defines it.
 PROMPT_TOKEN_RESERVE = 32
 HOLDOUT_SPLIT = "test_holdout"
+UNSEEN_NAMES_SPLIT = "test_unseen_names"
 
 
 def _latest_cohort() -> Path:
@@ -50,25 +54,19 @@ def main() -> int:
 
     tokenizer = BasicTokenizer()
     token_limit = PipelineConfig().max_sequence_length - PROMPT_TOKEN_RESERVE
-    holdout_family = next(f for f in TEMPLATE_FAMILIES if f["name"] == HOLDOUT_FAMILY)
-    counts = dict.fromkeys([*SPLITS, HOLDOUT_SPLIT], 0)
+    counts = dict.fromkeys([*SPLITS, HOLDOUT_SPLIT, UNSEEN_NAMES_SPLIT], 0)
     skipped = 0
     too_long = 0
 
     for split in counts:
         (OUTPUT_DIR / split).mkdir(parents=True, exist_ok=True)
 
-    with (
-        (OUTPUT_DIR / "train/records.jsonl").open("w", encoding="utf-8") as train_file,
-        (OUTPUT_DIR / "validation/records.jsonl").open("w", encoding="utf-8") as validation_file,
-        (OUTPUT_DIR / "test/records.jsonl").open("w", encoding="utf-8") as test_file,
-        (OUTPUT_DIR / HOLDOUT_SPLIT / "records.jsonl").open("w", encoding="utf-8") as holdout_file,
-    ):
+    with ExitStack() as stack:
         writers = {
-            "train": train_file,
-            "validation": validation_file,
-            "test": test_file,
-            HOLDOUT_SPLIT: holdout_file,
+            split: stack.enter_context(
+                (OUTPUT_DIR / split / "records.jsonl").open("w", encoding="utf-8")
+            )
+            for split in counts
         }
 
         for path in iter_bundle_files(cohort_dir):
@@ -85,7 +83,8 @@ def main() -> int:
             try:
                 records: dict[str, ExtractionRecord] = {split: build_record(patient_bundle)}
                 if split == "test":
-                    records[HOLDOUT_SPLIT] = build_record(patient_bundle, holdout_family)
+                    records[HOLDOUT_SPLIT] = build_record(patient_bundle, HOLDOUT_TEMPLATES)
+                    records[UNSEEN_NAMES_SPLIT] = build_record(patient_bundle, name_set="unseen")
             except ValueError as e:  # e.g. missing birth date or gender
                 print(f"Could not build record for {path}: {e}")
                 skipped += 1

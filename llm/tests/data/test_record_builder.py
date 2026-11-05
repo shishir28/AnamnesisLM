@@ -20,7 +20,7 @@ from anamnesislm.data.synthea.models import (
     Patient,
     PatientBundle,
 )
-from anamnesislm.data.templates import HOLDOUT_FAMILY, TEMPLATE_FAMILIES
+from anamnesislm.data.templates import HOLDOUT_TEMPLATES, SYMPTOMS, TRAIN_TEMPLATES
 
 FACT_KEYS = {
     "kind",
@@ -175,8 +175,16 @@ def test_augmented_facts_are_not_always_last() -> None:
     assert not all(positions)
 
 
-HOLDOUT = next(f for f in TEMPLATE_FAMILIES if f["name"] == HOLDOUT_FAMILY)
-HOLDOUT_MEDICATION = HOLDOUT["medication"].format(mention="Metformin 500 MG Oral Tablet")
+METFORMIN = "Metformin 500 MG Oral Tablet"
+
+
+def _medication_templates(record: Any) -> set[str]:
+    """The template each medication sentence was rendered from (mention put back as a slot)."""
+    return {
+        f["evidence"].replace(f["mention"], "{mention}")
+        for f in json.loads(record.expected_json)["facts"]
+        if f["kind"] == "medication"
+    }
 
 
 def _labels(facts: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
@@ -187,14 +195,17 @@ def _labels(facts: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
 
 
 def test_holdout_family_is_not_rendered_by_default() -> None:
-    assert all(HOLDOUT_MEDICATION not in build_record(b).note for b in MANY_PATIENTS)
+    used = set().union(*(_medication_templates(build_record(b)) for b in MANY_PATIENTS))
+
+    assert used.isdisjoint(HOLDOUT_TEMPLATES["medication"])
 
 
 def test_holdout_family_is_used_when_given() -> None:
-    assert all(
-        HOLDOUT_MEDICATION in build_record(b, template_family=HOLDOUT).note
-        for b in MANY_PATIENTS[:50]
+    used = set().union(
+        *(_medication_templates(build_record(b, HOLDOUT_TEMPLATES)) for b in MANY_PATIENTS[:50])
     )
+
+    assert used == set(HOLDOUT_TEMPLATES["medication"])
 
 
 @pytest.mark.parametrize("patient_bundle", MANY_PATIENTS[:50], ids=lambda b: b.patient_id)
@@ -202,7 +213,7 @@ def test_holdout_record_has_the_same_facts_in_different_words(
     patient_bundle: PatientBundle,
 ) -> None:
     default = build_record(patient_bundle)
-    holdout = build_record(patient_bundle, template_family=HOLDOUT)
+    holdout = build_record(patient_bundle, HOLDOUT_TEMPLATES)
 
     assert holdout.note != default.note
     assert _labels(json.loads(holdout.expected_json)["facts"]) == _labels(
@@ -210,9 +221,30 @@ def test_holdout_record_has_the_same_facts_in_different_words(
     )
 
 
+def test_phrasings_vary_across_patients() -> None:
+    used = set().union(*(_medication_templates(build_record(b)) for b in MANY_PATIENTS))
+    phrasings = set(TRAIN_TEMPLATES["medication"])
+
+    assert used <= phrasings
+    assert len(used) >= len(phrasings) - 2  # 200 patients use nearly every phrasing
+
+
+def test_one_note_can_mix_phrasing_styles() -> None:
+    """Phrasings are picked per sentence, not per note."""
+    styles = []
+    for patient_bundle in MANY_PATIENTS:
+        sentences = [f["evidence"] for f in _facts(patient_bundle)]
+        styles.append(
+            any(s.startswith(("Meds:", "Rx:")) for s in sentences)
+            and any(s.startswith("The patient") for s in sentences)
+        )
+
+    assert any(styles)
+
+
 @pytest.mark.parametrize("patient_bundle", MANY_PATIENTS[:50], ids=lambda b: b.patient_id)
 def test_holdout_offsets_point_at_the_evidence(patient_bundle: PatientBundle) -> None:
-    record = build_record(patient_bundle, template_family=HOLDOUT)
+    record = build_record(patient_bundle, HOLDOUT_TEMPLATES)
 
     for fact in json.loads(record.expected_json)["facts"]:
         assert record.note[fact["evidence_start"] : fact["evidence_end"]] == fact["evidence"]
@@ -262,3 +294,57 @@ def test_medications_keep_active_distinct_names() -> None:
 )
 def test_indefinite_article(age: int, article: str) -> None:
     assert _indefinite_article(age) == article
+
+
+# made-up and shortened names
+
+
+def _mentions(record: Any, kind: str) -> list[str]:
+    return [f["mention"] for f in json.loads(record.expected_json)["facts"] if f["kind"] == kind]
+
+
+def test_some_names_are_swapped_or_shortened_in_training_data() -> None:
+    drugs = [m for b in MANY_PATIENTS for m in _mentions(build_record(b), "medication")]
+
+    real_share = drugs.count(METFORMIN) / len(drugs)
+
+    assert 0.3 < real_share < 0.7  # most stay real; the rest are made up or shortened
+
+
+def test_short_drug_names_are_used() -> None:
+    drugs = {m for b in MANY_PATIENTS for m in _mentions(build_record(b), "medication")}
+
+    assert "Metformin" in drugs
+
+
+@pytest.mark.parametrize("patient_bundle", MANY_PATIENTS[:50], ids=lambda b: b.patient_id)
+def test_unseen_names_record_has_the_same_facts_with_new_names(
+    patient_bundle: PatientBundle,
+) -> None:
+    default = json.loads(build_record(patient_bundle).expected_json)["facts"]
+    unseen = json.loads(build_record(patient_bundle, name_set="unseen").expected_json)["facts"]
+
+    def without_names(facts: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
+        return [(f["kind"], f["assertion"], f["experiencer"], f["temporality"]) for f in facts]
+
+    assert without_names(unseen) == without_names(default)
+
+
+def test_unseen_names_replace_every_record_name() -> None:
+    real = {"Diabetes mellitus type 2", "Acute bronchitis", METFORMIN, "Peanut"}
+    for patient_bundle in MANY_PATIENTS[:50]:
+        record = build_record(patient_bundle, name_set="unseen")
+        record_facts = [
+            f for f in json.loads(record.expected_json)["facts"] if f["experiencer"] == "patient"
+        ]
+        names = {f["mention"] for f in record_facts if f["mention"] not in SYMPTOMS}
+        assert names.isdisjoint(real)
+
+
+@pytest.mark.parametrize("patient_bundle", MANY_PATIENTS[:50], ids=lambda b: b.patient_id)
+def test_unseen_names_offsets_point_at_the_evidence(patient_bundle: PatientBundle) -> None:
+    record = build_record(patient_bundle, name_set="unseen")
+
+    for fact in json.loads(record.expected_json)["facts"]:
+        assert record.note[fact["evidence_start"] : fact["evidence_end"]] == fact["evidence"]
+        assert fact["mention"] in fact["evidence"]

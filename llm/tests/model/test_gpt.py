@@ -49,10 +49,10 @@ def test_output_head_shares_the_token_embedding(config: ModelConfig) -> None:
 
 
 def test_num_parameters_counts_the_shared_table_once(config: ModelConfig) -> None:
-    # Per block: attention 3 x 16 x 16 = 768, feed-forward 16 x 64 + 64 + 64 x 16 + 16 = 2128,
-    # two LayerNorms 2 x 32 = 64 -> 2960; four blocks 11840.
+    # Per block: attention 3 x 16 x 16 = 768 plus out_proj 16 x 16 + 16 = 272, feed-forward
+    # 16 x 64 + 64 + 64 x 16 + 16 = 2128, two LayerNorms 2 x 32 = 64 -> 3232; four blocks 12928.
     # Token table 50 x 16 = 800, positions 8 x 16 = 128, final LayerNorm 32. Head is tied.
-    assert GPTModel(config).num_parameters() == 11840 + 800 + 128 + 32
+    assert GPTModel(config).num_parameters() == 12928 + 800 + 128 + 32
 
 
 def test_dropout_only_applies_in_training_mode() -> None:

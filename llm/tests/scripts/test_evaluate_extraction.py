@@ -253,3 +253,14 @@ def test_holdout_split_can_be_scored(script: ModuleType, monkeypatch: pytest.Mon
     _run(script, monkeypatch, "--split", "test_holdout")
 
     assert FakeExtractor.notes == ["Present illness: Asthma."]
+
+
+def test_data_dir_option_reads_splits_from_another_folder(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    frozen = tmp_path / "frozen"
+    _write_split(frozen, "test", ["Frozen note."])
+
+    _run(script, monkeypatch, "--data-dir", str(frozen))
+
+    assert FakeExtractor.notes == ["Frozen note."]  # overlap is still checked against DATA_DIR

@@ -29,8 +29,8 @@ class CharTokenizer:
         return EOS
 
 
-def _pipeline(**config: int) -> ExtractionDataPipeline:
-    return ExtractionDataPipeline(PipelineConfig(**config), CharTokenizer())
+def _pipeline(**config: int) -> ExtractionDataPipeline:  # int fields only
+    return ExtractionDataPipeline(PipelineConfig(**config), CharTokenizer())  # type: ignore[arg-type]
 
 
 def _record(note: str = "Denies fever.", record_id: str = "r1") -> ExtractionRecord:

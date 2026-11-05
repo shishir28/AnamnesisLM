@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from anamnesislm.model.config import ModelConfig
+from anamnesislm.model.kv_cache import KVCache
 from anamnesislm.model.transformer_block import TransformerBlock
 
 
@@ -34,32 +35,36 @@ class GPTModel(nn.Module):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, token_ids: torch.Tensor, cache: KVCache | None = None) -> torch.Tensor:
         """Forward pass through the model.
 
         Args:
-            token_ids: (batch_size, seq_length) token ids; seq_length <= context_length.
+            token_ids: (batch_size, seq_length) token ids. Without a cache, the whole sequence;
+                with one, only the positions after those already in the cache.
+            cache: generation-time KV cache, updated in place.
 
         Returns:
-            (batch_size, seq_length, vocab_size) next-token logits for each position.
+            (batch_size, seq_length, vocab_size) next-token logits for each given position.
         """
         _, seq_length = token_ids.shape
+        past = 0 if cache is None else cache.length
 
-        if seq_length > self.config.context_length:
+        if past + seq_length > self.config.context_length:
             raise ValueError(
-                f"Sequence length {seq_length} exceeds model context length {self.config.context_length}"
+                f"Sequence length {past + seq_length} exceeds model context length "
+                f"{self.config.context_length}"
             )
 
         # (batch_size, seq_length, embedding_dim)
         token_embeddings = self.token_embedding(token_ids)
-        # (seq_length,); broadcasts over the batch when added
-        position_ids = torch.arange(seq_length, device=token_ids.device)
+        # (seq_length,); broadcasts over the batch when added. Cached steps continue numbering.
+        position_ids = torch.arange(past, past + seq_length, device=token_ids.device)
         position_embeddings = self.position_embedding(position_ids)
         x = token_embeddings + position_embeddings
         x = self.dropout(x)
 
-        for block in self.transformer_blocks:
-            x = block(x)
+        for i, block in enumerate(self.transformer_blocks):
+            x = block(x, None if cache is None else cache.layers[i])
 
         x = self.final_layer_norm(x)
         logits: torch.Tensor = self.out_head(x)

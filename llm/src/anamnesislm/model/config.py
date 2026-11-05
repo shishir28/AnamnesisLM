@@ -12,3 +12,4 @@ class ModelConfig:
     num_layers: int = 4
     drop_rate: float = 0.1
     qkv_bias: bool = False
+    multi_head: bool = True

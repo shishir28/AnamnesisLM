@@ -36,8 +36,19 @@ EVALUATIONS_DIR = PROJECT_ROOT / "experiments/evaluations"
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
-    parser.add_argument("--split", choices=["test", "test_holdout", "validation"], default="test")
+    parser.add_argument(
+        "--split",
+        choices=["test", "test_holdout", "test_unseen_names", "validation"],
+        default="test",
+    )
     parser.add_argument("--limit", type=int, help="score only the first N records")
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DATA_DIR,
+        help="folder holding <split>/records.jsonl, e.g. a frozen copy of the test sets so "
+        "versions trained on different data are scored on the same notes",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -82,7 +93,7 @@ def main() -> int:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     started_at = datetime.now(UTC)
 
-    records = load_records(DATA_DIR / args.split / "records.jsonl")
+    records = load_records(args.data_dir / args.split / "records.jsonl")
     train_records = load_records(DATA_DIR / "train/records.jsonl")
     kept = remove_overlap(records, train_records)
     num_dropped = len(records) - len(kept)
@@ -103,6 +114,7 @@ def main() -> int:
         "git_dirty": git_dirty,
         "checkpoint": _display_path(args.checkpoint),
         "split": args.split,
+        "data_dir": _display_path(args.data_dir),
         "limit": args.limit,
         "num_dropped_overlap": num_dropped,
         "max_new_tokens": extractor.max_new_tokens,
